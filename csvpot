@@ -1,0 +1,89 @@
+# ============================================================
+# SCRAPING REDDIT SIN API (POST ESPECÍFICO)
+# ============================================================
+
+import requests
+import pandas as pd
+
+# ============================================================
+# LINK DEL POST (YA CONFIGURADO)
+# ============================================================
+
+url_post = "https://www.reddit.com/r/TheyBlamedTheBeasts/comments/1lf0rfk/if_you_let_pots_get_away_with_this_kinda_shit/.json"
+
+headers = {
+    "User-Agent": "script:sentiment.analysis:v1.0 (by /u/azartear)"
+}
+
+print("Obteniendo datos...")
+
+response = requests.get(url_post, headers=headers)
+
+print(response.status_code)  # para verificar
+
+if response.status_code != 200:
+    print("Error:", response.status_code)
+    print(response.text[:200])  # ver qué responde
+    exit()
+
+data = response.json()
+
+# ============================================================
+# FUNCIÓN PARA EXTRAER TODOS LOS COMENTARIOS
+# ============================================================
+
+comentarios = []
+
+def extraer_comentarios(lista):
+    for item in lista:
+        if item["kind"] == "t1":
+            data = item["data"]
+            
+            comentarios.append({
+                "usuario": data.get("author"),
+                "comentario": data.get("body"),
+                "score": data.get("score"),
+                "fecha": data.get("created_utc")
+            })
+            
+            # EXTRAER RESPUESTAS (recursivo)
+            if data.get("replies"):
+                if isinstance(data["replies"], dict):
+                    extraer_comentarios(data["replies"]["data"]["children"])
+
+# ============================================================
+# EJECUTAR EXTRACCIÓN
+# ============================================================
+
+print("Extrayendo comentarios...")
+
+extraer_comentarios(data[1]["data"]["children"])
+
+print("Total comentarios encontrados:", len(comentarios))
+
+# ============================================================
+# CREAR DATAFRAME
+# ============================================================
+
+df = pd.DataFrame(comentarios)
+
+# ============================================================
+# LIMPIEZA
+# ============================================================
+
+df = df[df["comentario"].notna()]
+df = df[df["comentario"] != "[deleted]"]
+df = df[df["comentario"] != "[removed]"]
+
+# Convertir fecha
+df["fecha"] = pd.to_datetime(df["fecha"], unit="s")
+
+# ============================================================
+# GUARDAR CSV
+# ============================================================
+
+archivo = "comentarios_post_reddit.csv"
+
+df.to_csv(archivo, index=False, encoding="utf-8")
+
+print("✅ Archivo guardado:", archivo)
